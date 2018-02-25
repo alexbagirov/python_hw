@@ -17,7 +17,7 @@ def make_stat(filename):
 
     stat = {current_year: {}}
 
-    entries = search_all_occurrences(s, '/>', '</a>')
+    entries = search_all_occurrences(s, '/">', '</a>')
     for entry in entries:
         surname, name = entry[0].split()
         if entry[1] >= next_year_start:
