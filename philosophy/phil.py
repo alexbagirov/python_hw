@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from urllib.request import urlopen
 from urllib.parse import quote, unquote
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
+from collections import deque
 import re
 
 
@@ -11,8 +12,8 @@ def get_content(name):
     В случае ошибки загрузки или отсутствия страницы возвращается None.
     """
     try:
-        return urlopen(name).read().decode('urf-8')
-    except URLError:
+        return urlopen(name).read().decode()
+    except (URLError, HTTPError):
         return None
 
 
@@ -36,7 +37,7 @@ def extract_links(page, begin, end):
     задающего позицию содержимого статьи на странице и возвращает все имеющиеся
     ссылки на другие вики-страницы без повторений и с учётом регистра.
     """
-    return set(map(unquote, re.findall('''<a +href=["']\/wiki\/([^#:]+?)["']''',
+    return set(map(unquote, re.findall('''<a +href=["']/wiki/([^#:]+?)["']''',
                                        page[begin:end],
                                        flags=re.I | re.M | re.U)))
 
@@ -48,7 +49,43 @@ def find_chain(start, finish):
     Первым элементом результата должен быть start, последним — finish.
     Если построить переходы невозможно, возвращается None.
     """
-    pass
+    if start == finish:
+        return [start, finish]
+
+    visited = set()
+    to_visit = deque()
+    previous = dict()
+    to_visit.appendleft(start)
+
+    while len(to_visit) != 0:
+        current = to_visit.pop()
+        visited.add(current)
+        text = get_content('https://ru.wikipedia.org/wiki/' +
+                           quote(current, safe=':/'))
+        if not text:
+            return None
+
+        new_links = extract_links(text, *extract_content(text))
+        for link in new_links:
+            if link not in visited:
+                to_visit.appendleft(link)
+                previous[link] = current
+
+                if link == finish:
+                    return build_path(start, finish, previous)
+
+    return None
+
+
+def build_path(start, finish, previous):
+    answer = [finish]
+    current = finish
+
+    while current != start:
+        current = previous[current]
+        answer.append(current)
+
+    return list(reversed(answer))
 
 
 def main():
