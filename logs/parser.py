@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import datetime
 import sys
 import math
 import re
@@ -13,25 +14,32 @@ class Parser(object):
         self.slowest_page = ''
         self.slowest_page_time = 0
 
+        self.slowest_average_page = ''
+
         self.fastest_page = ''
         self.fastest_page_time = math.inf
 
         self.pages = {}
         self.browsers = {}
         self.clients = {}
+        self.clients_by_days = {}
+        self.days = {}
 
         self.most_popular_pages = LexicographicTop()
         self.most_popular_agents = LexicographicTop()
         self.most_active_clients = LexicographicTop()
-
-        self.lol = 0
 
     def parse(self) -> None:
         """Основная функция обработки логов."""
         for line in sys.stdin:
             entry_info = self.extract_info(line)
             if entry_info:
-                self.update_stats(entry_info)
+                if 'time' in entry_info:
+                    self.update_stats(entry_info, with_time=True)
+                else:
+                    self.update_stats(entry_info, with_time=False)
+
+        self.find_slowest_average()
 
     @staticmethod
     def extract_info(s: str) -> (None, dict):
@@ -39,17 +47,15 @@ class Parser(object):
         Возвращает None в случае некорректной информации."""
         data = re.match('(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) - - \['
                         '(?P<date>\d{2}\/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|'
-                        'Oct|Nov|Dec)\/20\d{2}:[0-2][0-9]:[0-5]\d:[0-5]\d '
-                        '\+\d{4})] "(GET|PUT|POST|HEAD|OPTIONS|DELETE) '
+                        'Oct|Nov|Dec)\/20\d{2}):[0-2][0-9]:[0-5]\d:[0-5]\d '
+                        '\+\d{4}] "(GET|PUT|POST|HEAD|OPTIONS|DELETE) '
                         '(?P<url>\S+) \S+" \d+ \d+ "\S+" "(?P<browser>.+)"( '
                         '(?P<time>\d+)|)', s)
         return data.groupdict() if data else None
 
-    def update_stats(self, data: dict) -> None:
+    def update_stats(self, data: dict, with_time: bool) -> None:
         """Обновляет данные в соответствии с новой информацией."""
-        self.lol += 1
-
-        if 'time' in data:
+        if with_time:
             page_time = int(data['time'])
 
             if page_time >= self.slowest_page_time:
@@ -87,17 +93,46 @@ class Parser(object):
         self.most_active_clients.add_entry(data['ip'],
                                            self.clients[data['ip']])
 
+        date = datetime.strptime(data['date'], '%d/%b/%Y').date()
+
+        if data['ip'] not in self.clients_by_days:
+            self.clients_by_days[data['ip']] = {}
+        if date not in self.clients_by_days[data['ip']]:
+            self.clients_by_days[data['ip']][date] = 1
+        else:
+            self.clients_by_days[data['ip']][date] += 1
+
+        if date not in self.days:
+            self.days[date] = LexicographicTop()
+        self.days[date].add_entry(data['ip'],
+                                  self.clients_by_days[data['ip']][date])
+
+    def find_slowest_average(self) -> None:
+        """Подсчитывает среднее время загрузки для каждой страницы и находит
+        страницу с самым наихудшим временем."""
+        slowest_average_page = ''
+        slowest_average_page_time = 0
+
+        for page in self.pages.keys():
+            average_time = self.pages[page].total_time / self.pages[page].hits
+            if average_time > slowest_average_page_time:
+                slowest_average_page_time = average_time
+                slowest_average_page = page
+
+        self.slowest_average_page = slowest_average_page
+
     def print_stats(self) -> None:
         """Выводит статистику в нужном формате на консоль."""
         print('FastestPage: ' + self.fastest_page)
         print('MostActiveClient: ' + self.most_active_clients.get_top())
-        print('MostActiveClientByDay:\n')
+        print('MostActiveClientByDay: ')
+        for day in sorted(self.days.keys()):
+            print('  ' + str(day) + ': ' + self.days[day].get_top())
+        print()
         print('MostPopularBrowser: ' + self.most_popular_agents.get_top())
         print('MostPopularPage: ' + self.most_popular_pages.get_top())
-        print('SlowestAveragePage:')
-        print('SlowestPage: ' + self.slowest_page)
-        print(self.clients)
-        print(self.lol)
+        print('SlowestAveragePage: ' + self.slowest_average_page)
+        print('SlowestPage: ' + self.slowest_page + '\n')
 
 
 class Page(object):
