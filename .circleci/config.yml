@@ -28,7 +28,6 @@ jobs:
           command: |
             python3 -m venv venv
             . venv/bin/activate
-            pip install -r requirements.txt
             wget ftp://shannon.usu.edu.ru/python/hw4/v2/access.59G.log.gz
             gunzip access.59G.log.gz
 
