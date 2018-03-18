@@ -29,33 +29,32 @@ class Parser(object):
         self.most_popular_agents = LexicographicTop()
         self.most_active_clients = LexicographicTop()
 
+        self.pattern = re.compile('(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+                                  ' - - \[(?P<date>\d{2}/(Jan|Feb|Mar|Apr|May|'
+                                  'Jun|Jul|Aug|Sep|Oct|Nov|Dec)/20\d{2}):[0-2]'
+                                  '[0-9]:[0-5]\d:[0-5]\d \+\d{4}] "(GET|PUT|'
+                                  'POST|HEAD|OPTIONS|DELETE) (?P<url>\S+) '
+                                  '\S+" \d+ \d+ "\S+" "(?P<browser>.+)"( '
+                                  '(?P<time>\d+)|)')
+
     def parse(self) -> None:
         """Основная функция обработки логов."""
         for line in sys.stdin:
             entry_info = self.extract_info(line)
             if entry_info:
-                if 'time' in entry_info:
-                    self.update_stats(entry_info, with_time=True)
-                else:
-                    self.update_stats(entry_info, with_time=False)
+                self.update_stats(entry_info)
 
         self.find_slowest_average()
 
-    @staticmethod
-    def extract_info(s: str) -> (None, dict):
+    def extract_info(self, s: str) -> (None, dict):
         """Проверяет корректность строки и извлекает из неё информацию.
         Возвращает None в случае некорректной информации."""
-        data = re.match('(?P<ip>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}) - - \['
-                        '(?P<date>\d{2}\/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|'
-                        'Oct|Nov|Dec)\/20\d{2}):[0-2][0-9]:[0-5]\d:[0-5]\d '
-                        '\+\d{4}] "(GET|PUT|POST|HEAD|OPTIONS|DELETE) '
-                        '(?P<url>\S+) \S+" \d+ \d+ "\S+" "(?P<browser>.+)"( '
-                        '(?P<time>\d+)|)', s)
+        data = re.match(self.pattern, s)
         return data.groupdict() if data else None
 
-    def update_stats(self, data: dict, with_time: bool) -> None:
+    def update_stats(self, data: dict) -> None:
         """Обновляет данные в соответствии с новой информацией."""
-        if with_time:
+        if data['time']:
             page_time = int(data['time'])
 
             if page_time >= self.slowest_page_time:
@@ -164,8 +163,8 @@ class LexicographicTop(object):
 
     def add_entry(self, entry: str, entry_result: int) -> None:
         """Добавляет новый элемент к топу. Если результат элемента лучше
-        имеющегося, список лучших элементов очищается, иначе элемент добавляется
-        в топ."""
+        имеющегося, список лучших элементов очищается, иначе элемент
+        добавляется в топ."""
         if entry_result == self.top_result:
             self.top_entries.append(entry)
         elif entry_result > self.top_result:
